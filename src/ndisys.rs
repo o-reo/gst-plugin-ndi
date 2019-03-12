@@ -41,6 +41,33 @@ extern "C" {
         p_instance: NDIlib_recv_instance_t,
         p_audio_data: *const NDIlib_audio_frame_v2_t
     );
+
+    pub fn NDIlib_framesync_create(
+        p_instance: NDIlib_recv_instance_t
+    ) -> NDIlib_framesync_instance_t;
+    pub fn NDIlib_framesync_destroy(
+        p_instance: NDIlib_framesync_instance_t
+    );
+    pub fn NDIlib_framesync_capture_audio(
+        p_instance: NDIlib_framesync_instance_t,
+        p_audio_data: *const NDIlib_audio_frame_v2_t,
+        sample_rate: i32,
+        no_channels: i32,
+        no_samples: i32
+    );
+    pub fn NDIlib_framesync_free_audio(
+        p_instance: NDIlib_framesync_instance_t,
+        p_audio_data: *const NDIlib_audio_frame_v2_t
+    );
+    pub fn NDIlib_framesync_capture_video(
+        p_instance: NDIlib_framesync_instance_t,
+        p_video_data: *const NDIlib_video_frame_v2_t,
+        format_type: const NDIlib_frame_format_type_e
+    );
+    pub fn NDIlib_framesync_free_video(
+        p_instance: NDIlib_framesync_instance_t,
+        p_video_data: *const NDIlib_video_frame_v2_t
+    );
 }
 
 pub type NDIlib_find_instance_t = *mut ::std::os::raw::c_void;
@@ -156,11 +183,12 @@ impl Default for NDIlib_recv_create_v3_t {
 }
 
 pub type NDIlib_recv_instance_t = *mut ::std::os::raw::c_void;
+pub type NDIlib_framesync_instance_t = *mut ::std::os::raw::c_void;
 
 //Rust wrapper around *mut ::std::os::raw::c_void
 pub struct NdiInstance {
     pub recv: NDIlib_recv_instance_t,
-    // pub audio: bool,
+    pub fs: NDIlib_framesync_instance_t
 }
 
 unsafe impl ::std::marker::Send for NdiInstance {}

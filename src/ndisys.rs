@@ -41,7 +41,6 @@ extern "C" {
         p_instance: NDIlib_recv_instance_t,
         p_audio_data: *const NDIlib_audio_frame_v2_t
     );
-
     pub fn NDIlib_framesync_create(
         p_instance: NDIlib_recv_instance_t
     ) -> NDIlib_framesync_instance_t;
@@ -62,7 +61,7 @@ extern "C" {
     pub fn NDIlib_framesync_capture_video(
         p_instance: NDIlib_framesync_instance_t,
         p_video_data: *const NDIlib_video_frame_v2_t,
-        format_type: const NDIlib_frame_format_type_e
+        format_type: NDIlib_frame_format_type_e
     );
     pub fn NDIlib_framesync_free_video(
         p_instance: NDIlib_framesync_instance_t,

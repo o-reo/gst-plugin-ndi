@@ -26,6 +26,7 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use gst::GstObjectExt;
+use gst_base::BaseSrcExt;
 
 fn plugin_init(plugin: &gst::Plugin) -> Result<(), glib::BoolError> {
     ndivideosrc::register(plugin)?;
@@ -188,6 +189,8 @@ fn connect_ndi(cat: gst::DebugCategory, element: &gst_base::BaseSrc, ip: &str, s
             return 0;
         }
 
+        let pNDI_fs = NDIlib_framesync_create(pNDI_recv);
+
         NDIlib_find_destroy(pNDI_find);
 
         let tally_state: NDIlib_tally_t = Default::default();
@@ -210,11 +213,14 @@ fn connect_ndi(cat: gst::DebugCategory, element: &gst_base::BaseSrc, ip: &str, s
                 ip: source_ip.clone(),
                 video,
                 audio,
-                ndi_instance: NdiInstance { recv: pNDI_recv },
+                ndi_instance: NdiInstance { recv: pNDI_recv , fs: pNDI_fs},
                 initial_timestamp: 0,
                 id: id_receiver,
             },
         );
+
+        // Let BaseSrc create the timestamps
+        element.set_do_timestamp(true);
 
         gst_debug!(cat, obj: element, "Started NDI connection");
         id_receiver

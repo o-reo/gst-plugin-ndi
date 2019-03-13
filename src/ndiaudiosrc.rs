@@ -29,6 +29,9 @@ struct Settings {
     loss_threshold: u32,
     id_receiver: i8,
     latency: Option<gst::ClockTime>,
+    no_channels: i32,
+    sample_rate: i32,
+    no_samples: i32
 }
 
 impl Default for Settings {
@@ -39,6 +42,9 @@ impl Default for Settings {
             loss_threshold: 5,
             id_receiver: 0,
             latency: None,
+            sample_rate: 48000,
+            no_samples: 1024,
+            no_channels: 1
         }
     }
 }
@@ -258,7 +264,7 @@ impl ObjectSubclass for NdiAudioSrc {
                 let audio_frame: NDIlib_audio_frame_v2_t = Default::default();
 
                 unsafe {
-                    NDIlib_framesync_capture_audio(pNDI_fs, &audio_frame, 48000, 1, 1000);
+                    NDIlib_framesync_capture_audio(pNDI_fs, &audio_frame, 0, 0, settings.no_samples);
                 }
                 gst_debug!(self.cat, obj: element, "NDI audio frame received: {:?}", audio_frame);
 
@@ -349,25 +355,23 @@ impl ObjectSubclass for NdiAudioSrc {
 
             let audio_frame: NDIlib_audio_frame_v2_t = Default::default();
 
-            // TODO: Set sample rate and no_channels as a setting
-            let no_samples = 1000 as u64;
-            let sample_rate = 48000 as u64;
-            let no_channels = 1 as u32;
             unsafe {
-                NDIlib_framesync_capture_audio(pNDI_fs, &audio_frame, sample_rate as i32, no_channels as i32, no_samples as i32);
+                NDIlib_framesync_capture_audio(pNDI_fs, &audio_frame, 0, 0, settings.no_samples as i32);
             }
-            gst_log!(self.cat, obj: element, "Fixate: {:?}", (sample_rate as i32));
+            gst_log!(self.cat, obj: element, "Fixate: {:?}", (audio_frame.sample_rate));
 
-            settings.latency = gst::SECOND.mul_div_floor(no_samples, sample_rate);
+            settings.latency = gst::SECOND.mul_div_floor(settings.no_samples as u64, audio_frame.sample_rate as u64);
+            settings.no_channels = audio_frame.no_channels;
+            settings.sample_rate = audio_frame.sample_rate;
 
             let mut caps = gst::Caps::truncate(caps);
             {
                 let caps = caps.make_mut();
                 let s = caps.get_mut_structure(0).unwrap();
-                s.fixate_field_nearest_int("rate", sample_rate as i32);
-                s.fixate_field_nearest_int("channels", no_channels as i32);
+                s.fixate_field_nearest_int("rate", audio_frame.sample_rate);
+                s.fixate_field_nearest_int("channels", audio_frame.no_channels);
                 s.fixate_field_str("layout", "interleaved");
-                s.set_value("channel-mask", gst::Bitmask::new(gst_audio::AudioChannelPosition::get_fallback_mask(no_channels)).to_send_value());
+                s.set_value("channel-mask", gst::Bitmask::new(gst_audio::AudioChannelPosition::get_fallback_mask(audio_frame.no_channels as u32)).to_send_value());
             }
 
             let _ = element.post_message(&gst::Message::new_latency().src(Some(element)).build());
@@ -388,10 +392,6 @@ impl ObjectSubclass for NdiAudioSrc {
 
             let mut timestamp_data = self.timestamp_data.lock().unwrap();
 
-            // Catch it in the settings or in the frame if different
-            let no_samples = 1000 as u64;
-            let sample_rate = 48000 as u64;
-            let no_channels = 1 as u32;
 
             let state = self.state.lock().unwrap();
             let _info = match state.info {
@@ -409,24 +409,24 @@ impl ObjectSubclass for NdiAudioSrc {
             let audio_frame: NDIlib_audio_frame_v2_t = Default::default();
 
             unsafe {
-                NDIlib_framesync_capture_audio(pNDI_fs, &audio_frame, sample_rate as i32, no_channels as i32, no_samples as i32);
+                NDIlib_framesync_capture_audio(pNDI_fs, &audio_frame, _settings.sample_rate, _settings.no_channels, _settings.no_samples);
             }
             gst_log!(self.cat, obj: element, "NDI audio frame received: {:?}", (audio_frame));
 
             // We multiply by 2 because is the size in bytes of an i16 variable
-            let buff_size = (no_samples * no_channels as u64 * 2) as usize;
+            let buff_size = (_settings.no_samples * _settings.no_channels * 2) as usize;
 
             let mut buffer = gst::Buffer::with_size(buff_size).unwrap();
             {
                 let buffer = buffer.get_mut().unwrap();
 
                 let pts_start: gst::ClockTime = timestamp_data.offset
-                    .mul_div_floor(gst::SECOND_VAL, sample_rate)
+                    .mul_div_floor(gst::SECOND_VAL, _settings.sample_rate as u64)
                     .unwrap()
                     .into();
-                timestamp_data.offset += no_samples;
+                timestamp_data.offset += _settings.no_samples as u64;
                 let pts_end: gst::ClockTime = timestamp_data.offset
-                    .mul_div_floor(gst::SECOND_VAL, sample_rate)
+                    .mul_div_floor(gst::SECOND_VAL, _settings.sample_rate as u64)
                     .unwrap()
                     .into();
                 buffer.set_pts(pts_start);

@@ -237,8 +237,10 @@ fn stop_ndi(cat: gst::DebugCategory, element: &gst_base::BaseSrc, id: i8) -> boo
         }
 
         let recv = &val.ndi_instance;
+        let pNDI_fs = recv.fs;
         let pNDI_recv = recv.recv;
         unsafe {
+            NDIlib_framesync_destroy(pNDI_fs);
             NDIlib_recv_destroy(pNDI_recv);
             // ndi_struct.recv = None;
             NDIlib_destroy();

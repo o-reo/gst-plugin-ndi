@@ -26,7 +26,6 @@ use std::collections::HashMap;
 use std::sync::Mutex;
 
 use gst::GstObjectExt;
-use gst_base::BaseSrcExt;
 
 fn plugin_init(plugin: &gst::Plugin) -> Result<(), glib::BoolError> {
     ndivideosrc::register(plugin)?;
@@ -218,10 +217,6 @@ fn connect_ndi(cat: gst::DebugCategory, element: &gst_base::BaseSrc, ip: &str, s
                 id: id_receiver,
             },
         );
-
-        // Let BaseSrc create the timestamps
-        element.set_do_timestamp(true);
-
         gst_debug!(cat, obj: element, "Started NDI connection");
         id_receiver
     }

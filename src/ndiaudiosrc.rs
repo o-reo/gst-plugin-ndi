@@ -268,6 +268,11 @@ impl ObjectSubclass for NdiAudioSrc {
                 }
                 gst_debug!(self.cat, obj: element, "NDI audio frame received: {:?}", audio_frame);
 
+                if receiver.initial_timestamp <= audio_frame.timecode as u64
+                || receiver.initial_timestamp == 0 {
+                    receiver.initial_timestamp = audio_frame.timecode as u64;
+                }
+
                 unsafe {
                     NDIlib_framesync_free_audio(pNDI_fs, &audio_frame);
                 }
@@ -358,7 +363,6 @@ impl ObjectSubclass for NdiAudioSrc {
             unsafe {
                 NDIlib_framesync_capture_audio(pNDI_fs, &audio_frame, 0, 0, settings.no_samples as i32);
             }
-            gst_log!(self.cat, obj: element, "Fixate: {:?}", (audio_frame.sample_rate));
 
             settings.latency = gst::SECOND.mul_div_floor(settings.no_samples as u64, audio_frame.sample_rate as u64);
             settings.no_channels = audio_frame.no_channels;
@@ -409,32 +413,74 @@ impl ObjectSubclass for NdiAudioSrc {
             let audio_frame: NDIlib_audio_frame_v2_t = Default::default();
 
             unsafe {
-                NDIlib_framesync_capture_audio(pNDI_fs, &audio_frame, _settings.sample_rate, _settings.no_channels, _settings.no_samples);
+                NDIlib_framesync_capture_audio(pNDI_fs, &audio_frame, 0, 0, _settings.no_samples);
             }
+
+            // Catch running time asap
+            let pts_start: gst::ClockTime =
+                element.get_clock().unwrap().get_time() - element.get_base_time();
+
             gst_log!(self.cat, obj: element, "NDI audio frame received: {:?}", (audio_frame));
 
+            // Prepare buffer flags
+            let mut flags = gst::BufferFlags::empty();
+
+            if audio_frame.sample_rate != _settings.sample_rate || audio_frame.no_channels != _settings.no_channels {
+                gst_debug!(self.cat, obj: element, "==> NDI audio needs reconfiguration");
+                element.get_pads()[0].mark_reconfigure();
+                // flags.set(gst::BufferFlags::GAP, true);
+            }
+
             // We multiply by 2 because is the size in bytes of an i16 variable
-            let buff_size = (_settings.no_samples * _settings.no_channels * 2) as usize;
+            let buff_size = (audio_frame.no_samples * audio_frame.no_channels * 2) as usize;
 
             let mut buffer = gst::Buffer::with_size(buff_size).unwrap();
             {
                 let buffer = buffer.get_mut().unwrap();
 
-                let pts_start: gst::ClockTime = timestamp_data.offset
-                    .mul_div_floor(gst::SECOND_VAL, _settings.sample_rate as u64)
-                    .unwrap()
-                    .into();
-                timestamp_data.offset += _settings.no_samples as u64;
-                let pts_end: gst::ClockTime = timestamp_data.offset
-                    .mul_div_floor(gst::SECOND_VAL, _settings.sample_rate as u64)
-                    .unwrap()
-                    .into();
-                buffer.set_pts(pts_start);
-                buffer.set_duration(pts_end - pts_start);
+                // let pts_start: gst::ClockTime = timestamp_data.offset
+                //     .mul_div_floor(gst::SECOND_VAL, _settings.sample_rate as u64)
+                //     .unwrap()
+                //     .into();
+
+                // buffer.set_offset(timestamp_data.offset);
+
+                // let time = timestamp_data.offset;
+
+                // buffer.set_pts(pts_start);
+                // buffer.set_pts(gst::ClockTime::from(time));
+
+                // timestamp_data.offset += audio_frame.no_samples as u64 *
+                    // gst::SECOND_VAL / audio_frame.sample_rate as u64;
+
+                // buffer.set_offset_end(timestamp_data.offset);
+
+                // let pts_end: gst::ClockTime = timestamp_data.offset
+                //     .mul_div_floor(gst::SECOND_VAL, _settings.sample_rate as u64)
+                //     .unwrap()
+                //     .into();
+
+                // let pts_end: gst::ClockTime = (audio_frame.no_samples as u64)
+                    // .mul_div_floor(gst::SECOND_VAL, audio_frame.sample_rate as u64)
+                    // .unwrap()
+                    // .into();
+
+                // buffer.set_duration(pts_end);
+                // gst_log!(self.cat, obj: element, "Returning duration {}", pts_end);
+
+                // Set flags to live so it drops when in pause state
+                flags.set(gst::BufferFlags::LIVE, true);
+
+                // let time = receivers.get(&_settings.id_receiver).unwrap().initial_timestamp;
+                // if audio_frame.timecode <= time as i64 {
+                    // flags.set(gst::BufferFlags::GAP, true);
+                // }
+                buffer.set_flags(flags);
 
                 let mut dst: NDIlib_audio_frame_interleaved_16s_t = Default::default();
                 dst.reference_level = 0;
                 dst.p_data = buffer.map_writable().unwrap().as_mut_slice_of::<i16>().unwrap().as_mut_ptr();
+
                 unsafe {
                     NDIlib_util_audio_to_interleaved_16s_v2(&audio_frame, &mut dst);
                     NDIlib_framesync_free_audio(pNDI_fs, &audio_frame);

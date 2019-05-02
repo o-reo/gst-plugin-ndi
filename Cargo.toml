@@ -3,6 +3,7 @@ name = "gst-plugin-ndi"
 version = "1.0.0"
 authors = ["Ruben Gonzalez <rubenrua@teltek.es>", "Daniel Vilar <daniel.peiteado@teltek.es>"]
 repository = "https://github.com/teltek/gst-plugin-ndi"
+build = "build.rs"
 license = "LGPL"
 
 [dependencies]

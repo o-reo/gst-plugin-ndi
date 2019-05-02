@@ -2,7 +2,6 @@
 
 use std::ptr;
 
-#[link(name = "ndi")]
 extern "C" {
     pub fn NDIlib_initialize() -> bool;
     pub fn NDIlib_find_create_v2(
